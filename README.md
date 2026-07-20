@@ -7,6 +7,7 @@ will shortly be asked to build agentic systems for an enterprise. Every module i
 a runnable file, every example is drawn from insurance or asset management, and
 nothing is hand-waved.
 
+Built and maintained by [Tarka Upskilling and Engineering Co.](https://tarkaupskilling.com)
 
 ---
 
@@ -48,20 +49,27 @@ So the order is deliberate:
 ```
 LangGraph-Essentials/
 │
-├── 01_state_typeddict_vs_pydantic.py     State. TypedDict vs Pydantic.
-├── 02_news_analyst_workflow.py           First complete graph. Conditional edges.
-├── 03a_reducers.py                       Reducers, in isolation.
-├── 03b_portfolio_workflow.py             Reducers applied. Parallel nodes. Streaming.
-├── 04_claim_settlement_agent.py          Tools, agent loop, scoring, human approval.
+├── LangGraph 101.pdf                  Start here. Concepts, before any code.
 │
-├── .env                                  Your API keys. Never commit this.
-├── .env.example                          Template. Commit this instead.
+├── 1_statetypeddictvspydantic.py      State. TypedDict vs Pydantic.
+├── 2_basicWorkflow.py                 First complete graph. Conditional edges.
+├── 3_reducers.py                      Reducers, in isolation.
+├── 4_portfolioWorkflow.py             Reducers applied. Parallel nodes. Streaming.
+├── 5_claimSettlementAgent.py          Tools, agent loop, scoring, human approval.
+│
+├── .env                               Your API keys. Never commit this.
+├── .gitignore
 ├── requirements.txt
+├── LICENSE
 └── README.md
 ```
 
-Files are numbered in teaching order. Run them in order. Each one assumes the
-previous one has landed.
+**Read `LangGraph 101.pdf` first.** It covers the vocabulary — what a graph is,
+what nodes and edges are, why cycles matter — without any code to distract from
+it. The Python files assume you have seen it.
+
+After that, run the numbered files in order. Each one assumes the previous one
+has landed.
 
 ---
 
@@ -75,15 +83,19 @@ python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 pip install -r requirements.txt
-cp .env.example .env               # then open .env and paste your keys
 ```
 
-`.env` needs:
+Create a `.env` file in the repository root:
 
 ```
 OPENAI_API_KEY=sk-...
-TAVILY_API_KEY=tvly-...            # only for module 02 with real search
+TAVILY_API_KEY=tvly-...            # only for file 2 with real search
 ```
+
+No spaces around `=`, no quotes, no trailing space after the key.
+
+**Confirm `.env` is in your `.gitignore` before your first commit.** An API key
+in git history is very hard to remove properly.
 
 ### If you get a 401
 
@@ -97,15 +109,21 @@ echo $OPENAI_API_KEY               # anything printed here is your culprit
 unset OPENAI_API_KEY
 ```
 
-Every file in this repo uses `load_dotenv(override=True)` for exactly this
-reason. Check your `.env` has no spaces around `=`, no quotes, and no trailing
-space after the key.
+Every file in this repository uses `load_dotenv(override=True)` for exactly this
+reason.
+
+### About the warnings in your editor
+
+Some files show type-checker warnings on purpose. `1_statetypeddictvspydantic.py`
+deliberately assigns invalid data to a TypedDict — the red underline **is** the
+lesson. It demonstrates that your editor catches the error while Python at
+runtime does not.
 
 ---
 
 ## The modules
 
-### 01 — State: TypedDict vs Pydantic
+### 1 — State: TypedDict vs Pydantic
 
 **No API key needed.**
 
@@ -120,7 +138,7 @@ pointing at the line that caused it.
 **The takeaway:** TypedDict is checked by your editor and erased at runtime.
 Pydantic is checked at runtime. Both are correct tools for different jobs.
 
-**The rule this repo follows throughout:**
+**The rule this repository follows throughout:**
 
 > Validate at the doors, not in the corridors.
 > The doors are Pydantic. The corridor is a TypedDict.
@@ -134,9 +152,15 @@ work-in-progress document. It is *supposed* to be half-empty at node one. A
 Pydantic model demands a complete, valid object every time it is touched, which
 is exactly the condition graph state is never in until END.
 
+**One point of confusion worth settling early.** `Optional[float]` means
+`float | None` — the **value** may be None. It does **not** mean the key can be
+left out. In a TypedDict neither rule is enforced at runtime anyway; `Optional`
+is a note to the reader saying "this field starts empty and a node fills it in
+later, so check before you use it."
+
 ---
 
-### 02 — Your first complete graph
+### 2 — Your first complete graph
 
 **Needs an API key.**
 
@@ -162,12 +186,21 @@ A ROUTER returns a string  ->  it CHOOSES the next node
 *The quality threshold lives in the state, not in the code.* This means you can
 run the identical graph twice with different thresholds and watch it take
 different paths — a live demonstration of a conditional edge that works every
-time, without faking any data.
+time, without faking any data. The score does not change between runs; the
+**bar** does.
 
 *`refine_node` flows forward to `summarize_node` rather than back to
 `evaluate_node`.* That means this graph cannot loop forever. Loops are powerful
 and come later, but a loop needs a counter and an escape hatch, and a first
 example should need neither.
+
+**Structured output instead of regex.** The evaluator must return a number, but
+an LLM returns text. Hunting for `SCORE:\s*(\d+)` with a regular expression
+breaks the moment the model writes "Score: 7/10", and the usual fallback quietly
+turns a *parse* failure into a *quality* failure. A Pydantic schema passed to
+`.with_structured_output()` removes the regex, the fallback, and the format
+instructions in one move. This is the "validate at the doors" rule from file 1,
+applied — an LLM response is a door.
 
 **An honesty note that matters.** An LLM cannot browse the web. Ask one for
 "recent news" and it will produce realistic headlines with names, numbers and
@@ -179,7 +212,7 @@ own hallucination is the most common beginner agent mistake there is.
 
 ---
 
-### 03a — Reducers
+### 3 — Reducers
 
 **No API key needed.**
 
@@ -198,8 +231,8 @@ At every step LangGraph holds two values and needs one: what is already in state
 and what the node just returned.
 
 ```
-default rule    ->  return new              REPLACE, the old value is discarded
-Annotated[list, add]  ->  return old + new  COMBINE, both survive
+default rule           ->  return new        REPLACE, the old value is discarded
+Annotated[list, add]   ->  return old + new  COMBINE, both survive
 ```
 
 There is no such thing as a field without a reducer. There is only the default
@@ -247,7 +280,7 @@ return {"log": [x]}           # RIGHT — nodes describe changes,
 
 ---
 
-### 03b — Portfolio risk review
+### 4 — Portfolio risk review
 
 **No API key needed.**
 
@@ -305,7 +338,7 @@ Streaming does not make the graph faster. It changes when you **see** it.
 
 ---
 
-### 04 — Claim settlement agent with a live adjuster
+### 5 — Claim settlement agent with a live adjuster
 
 **Needs an API key. This is the capstone.**
 
@@ -356,7 +389,7 @@ START -> [investigate] <--+
 **1. The loop is what makes it an agent.**
 `investigate -> tools -> investigate` is a cycle. The model decides how many
 times it goes round, not you. That is the entire difference between a workflow
-and an agent. Everything in modules 02 and 03 was a workflow.
+and an agent. Everything in files 2, 3 and 4 was a workflow.
 
 **2. The LLM does not run your code.**
 It cannot. It has no interpreter. When you "give a model tools" you send it
@@ -417,6 +450,10 @@ Then run it three times and answer differently each time:
 Same claim. Same code. Three business outcomes. The only thing that changed was a
 keystroke.
 
+`approve` and `modify` both end at `settle` — the difference between them is the
+**amount**, not the path. `modify` overwrites `payout_amount` on its way past, so
+`settle` reads the adjuster's figure instead of the machine's.
+
 ---
 
 ## The four primitives, on one page
@@ -467,14 +504,14 @@ tells you exactly which node failed.
 
 ## Roadmap
 
-| Module | Topic |
+| Next | Topic |
 |---|---|
-| 05 | Checkpointers, threads, short vs long-term memory, time travel |
-| 06 | Subgraphs, `Command`, the `Send` API for dynamic map-reduce |
-| 07 | Multi-agent: supervisor, network, hierarchical teams |
-| 08 | Retries, error handling, durable execution, caching |
-| 09 | Testing graphs, LangSmith tracing, evals |
-| 10 | Deployment: LangGraph Platform, FastAPI, Docker |
+| 6 | Checkpointers, threads, short vs long-term memory, time travel |
+| 7 | Subgraphs, `Command`, the `Send` API for dynamic map-reduce |
+| 8 | Multi-agent: supervisor, network, hierarchical teams |
+| 9 | Retries, error handling, durable execution, caching |
+| 10 | Testing graphs, LangSmith tracing, evals |
+| 11 | Deployment: LangGraph Platform, FastAPI, Docker |
 
 ---
 
@@ -498,10 +535,10 @@ policies, claims, holdings or customers appear anywhere.
 
 ## A note on style
 
-Every file in this repository is written to be read aloud. Comments explain
-**why** a line exists, not what it does. Concept files are separate from
-application files, so a participant learning reducers is not simultaneously
-learning about portfolio risk.
+Every file is written to be read aloud. Comments explain **why** a line exists,
+not what it does. Concept files are kept separate from application files, so a
+participant learning reducers is not simultaneously learning about portfolio
+risk — file 3 teaches the mechanism, file 4 puts it to work.
 
 Where a design choice was made, the reasoning is in the file. Where an example is
 simplified, the simplification is stated rather than hidden.
