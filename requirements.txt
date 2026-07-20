@@ -1,0 +1,10 @@
+langchain 
+openai
+langchain-community
+langchain-core
+langchain-openai
+python-dotenv
+streamlit
+torch 
+pydantic
+langchain-tavily
