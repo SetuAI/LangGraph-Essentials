@@ -7,7 +7,7 @@ will shortly be asked to build agentic systems for an enterprise. Every module i
 a runnable file, every example is drawn from insurance or asset management, and
 nothing is hand-waved.
 
-Built and maintained by [Tarka Upskilling and Engineering Co.](https://tarkaupskilling.com)
+
 
 ---
 
